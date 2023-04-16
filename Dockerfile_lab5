@@ -1,0 +1,37 @@
+FROM node:alpine as build-react
+WORKDIR /react-app
+#instalacja zaleznosci oraz stworzenie aplikacji react
+RUN npm install create-react-app && npx create-react-app react-nginx-app
+#kopiujemy glowny komponent
+COPY App.js ./react-nginx-app/src/App.js
+#zmiana katalogu
+WORKDIR /react-app/react-nginx-app
+
+ARG VERSION=1.0.0
+#Tworzenie pliku .env przechowujacego zmienne srodowiskowe, do ktorych 
+#react moze miec dostep 
+#oraz definicja zmiennej REACT_APP_VERSION
+RUN touch ./src/.env && echo REACT_APP_VERSION=${VERSION} >> ./src/.env
+
+ARG VERSION
+#eksportujemy zmienna srodowiskowa
+ENV REACT_APP_VERSION=${VERSION}
+
+#budujemy aplikacje
+RUN npm run build
+
+FROM nginx:alpine
+#Kopiujemy zbudowana aplikacje
+COPY --from=build-react /react-app/react-nginx-app/build /usr/share/nginx/html
+#Kopiujemy konfiguracje
+COPY default /etc/nginx/sites-available/default
+#curl
+RUN apk add --update curl && rm -rf /var/cache/apk/*
+
+EXPOSE 80/tcp
+
+HEALTHCHECK --interval=10s --timeout=1s \
+  CMD curl -f http://localhost:80/ || exit 1
+
+ENTRYPOINT [ "nginx" ]
+CMD [ "-g", "daemon off;" ]
